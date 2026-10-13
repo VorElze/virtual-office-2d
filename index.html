@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Hermes — Virtual Office</title>
+  <link rel="icon" href="/assets/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/assets/css/office.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Hermes Virtual Office"><span class="brand-mark">⌂</span><span><b>Hermes Virtual Office</b><small>Pixel team space · live workforce board</small></span></a>
+    <div class="top-actions"><span class="connection"><i id="connectionLed"></i><span id="connectionText">Memuat…</span></span><time id="updated">—</time><button class="retro-button" id="refreshButton">↻ Refresh</button></div>
+  </header>
+  <main class="page">
+    <section class="stats" aria-label="Ringkasan">
+      <article><small>Profiles</small><strong id="profileCount">—</strong><span>worker profiles</span></article>
+      <article><small>Sedang bekerja</small><strong id="workingCount">—</strong><span>run / kartu aktif</span></article>
+      <article><small>Kartu aktif</small><strong id="taskCount">—</strong><span>ready · running · blocked</span></article>
+      <article><small>Status runtime</small><strong id="runtimeStatus">—</strong><span>monitoring</span></article>
+    </section>
+    <section class="layout">
+      <article class="panel office-panel">
+        <div class="panel-heading">
+          <div><h1>🏢 Virtual Office 2D</h1><small>Grid 32px · zonasi 4 ruang · live agent status</small></div>
+          <div class="legend"><span><i class="green"></i>Working</span><span><i class="yellow"></i>Available</span><span><i class="red"></i>Unknown</span></div>
+        </div>
+        <div class="viewport" id="mapViewport">
+          <div class="canvas-wrap" id="canvasWrap">
+            <canvas id="officeCanvas" aria-label="Peta kantor virtual"></canvas>
+            <div class="canvas-overlay" id="canvasOverlay"></div>
+          </div>
+        </div>
+        <div class="office-controls">
+          <span id="mapHint">Klik avatar untuk detail</span>
+          <button class="retro-button workspace-button" id="workspaceButton" aria-pressed="false">⌖ Workspace view</button>
+          <span class="zoom-controls"><button class="retro-button" id="zoomOut" aria-label="Zoom out">−</button><button class="retro-button" id="zoomReset">100%</button><button class="retro-button" id="zoomIn" aria-label="Zoom in">+</button></span>
+        </div>
+      </article>
+      <aside class="side-column">
+        <article class="panel">
+          <div class="panel-heading"><h2>📌 Pekerjaan aktif</h2><select id="taskFilter" class="retro-select" aria-label="Filter status kartu"><option value="all">Semua status</option><option value="running">Running</option><option value="ready">Ready</option><option value="blocked">Blocked</option></select></div>
+          <div class="task-list" id="taskList"></div>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><h2>🕘 Aktivitas terbaru</h2><small id="pollRate">auto · 5s</small></div>
+          <div class="activity-list" id="activityList"></div>
+        </article>
+        <article class="panel chat-panel">
+          <div class="panel-heading"><h2>💬 Office chat</h2><small id="chatTarget"># all-hands</small></div>
+          <div class="chat-messages" id="chatMessages"></div>
+          <form id="chatForm" class="chat-form"><input id="chatInput" autocomplete="off" maxlength="2000" placeholder="@profile pesan…" aria-label="Pesan chat"><button class="retro-button" type="submit">Send</button><button class="retro-button profile-roster-toggle" id="profileRosterToggle" type="button" aria-expanded="false" aria-controls="profileRoster">👥 Profil</button><div id="profileRoster" class="profile-roster" aria-label="Daftar profil" hidden></div></form>
+          <small class="chat-note">Gunakan @profile atau @division:engineering</small>
+        </article>
+      </aside>
+    </section>
+    <p class="footer-note">Data live dari Hermes profiles dan Kanban. Kuning: roaming terbatas Cafeteria/Lounge · hijau: workstation Main Office · merah: telemetry unknown.</p>
+  </main>
+  <dialog id="profileDialog" class="profile-dialog">
+    <form method="dialog" class="dialog-top"><button class="retro-button" value="close">Tutup ✕</button></form>
+    <div id="profileDetail"></div>
+  </dialog>
+  <!-- VO2D-F3: modal Kanban Task-Manager — id TERPISAH dari #profileDialog.
+       Struktur: root fixed (z-index 40, di bawah #toast 50) > backdrop + panel.
+       Klik backdrop / tombol ✕ / Escape menutup; body scroll dikunci saat terbuka. -->
+  <div id="kanbanModal" class="kanban-modal" data-open="false" hidden role="dialog" aria-modal="true" aria-labelledby="kanbanTitle">
+    <div class="kanban-backdrop" data-backdrop="true"></div>
+    <div class="kanban-panel">
+      <div class="kanban-head">
+        <div><h2 id="kanbanTitle">📌 Kanban Task-Manager</h2><small id="kanbanBoardMeta">memuat…</small></div>
+        <button class="retro-button kanban-close" id="kanbanClose" type="button" aria-label="Tutup papan Kanban">✕</button>
+      </div>
+      <div class="kanban-filters" id="kanbanFilters" role="group" aria-label="Filter status kartu"></div>
+      <div class="kanban-columns" id="kanbanColumns"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/assets/js/main.js"></script>
+</body>
+</html>

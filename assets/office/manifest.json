@@ -1,0 +1,500 @@
+{
+  "source": "img_d6347512222b.jpg (Gemini AI generated, 1280x714)",
+  "style": "pixel-art, native 1x (no scaling)",
+  "assets": [
+    {
+      "name": "building_exterior",
+      "category": "sprite",
+      "file": "sprites/building_exterior.png",
+      "w": 388,
+      "h": 372,
+      "src_box": [
+        21,
+        13,
+        386,
+        369
+      ]
+    },
+    {
+      "name": "cubicle_row_7seat",
+      "category": "sprite",
+      "file": "sprites/cubicle_row_7seat.png",
+      "w": 410,
+      "h": 103,
+      "src_box": [
+        437,
+        24,
+        410,
+        103
+      ]
+    },
+    {
+      "name": "cubicle_row_4seat",
+      "category": "sprite",
+      "file": "sprites/cubicle_row_4seat.png",
+      "w": 265,
+      "h": 103,
+      "src_box": [
+        437,
+        140,
+        265,
+        103
+      ]
+    },
+    {
+      "name": "meeting_table",
+      "category": "sprite",
+      "file": "sprites/meeting_table.png",
+      "w": 238,
+      "h": 99,
+      "src_box": [
+        864,
+        37,
+        238,
+        99
+      ]
+    },
+    {
+      "name": "bookshelf_1",
+      "category": "sprite",
+      "file": "sprites/bookshelf_1.png",
+      "w": 60,
+      "h": 73,
+      "src_box": [
+        1130,
+        26,
+        60,
+        73
+      ]
+    },
+    {
+      "name": "bookshelf_2",
+      "category": "sprite",
+      "file": "sprites/bookshelf_2.png",
+      "w": 60,
+      "h": 73,
+      "src_box": [
+        1198,
+        26,
+        60,
+        73
+      ]
+    },
+    {
+      "name": "wall_clock_1200",
+      "category": "sprite",
+      "file": "sprites/wall_clock_1200.png",
+      "w": 47,
+      "h": 25,
+      "src_box": [
+        1170,
+        113,
+        46,
+        25
+      ]
+    },
+    {
+      "name": "printer",
+      "category": "sprite",
+      "file": "sprites/printer.png",
+      "w": 43,
+      "h": 46,
+      "src_box": [
+        725,
+        176,
+        43,
+        46
+      ]
+    },
+    {
+      "name": "water_dispenser",
+      "category": "sprite",
+      "file": "sprites/water_dispenser.png",
+      "w": 32,
+      "h": 58,
+      "src_box": [
+        799,
+        168,
+        32,
+        58
+      ]
+    },
+    {
+      "name": "water_dispenser_alt",
+      "category": "sprite",
+      "file": "sprites/water_dispenser_alt.png",
+      "w": 33,
+      "h": 75,
+      "src_box": [
+        28,
+        433,
+        31,
+        75
+      ]
+    },
+    {
+      "name": "sofa_long",
+      "category": "sprite",
+      "file": "sprites/sofa_long.png",
+      "w": 136,
+      "h": 57,
+      "src_box": [
+        904,
+        176,
+        136,
+        57
+      ]
+    },
+    {
+      "name": "sofa_short",
+      "category": "sprite",
+      "file": "sprites/sofa_short.png",
+      "w": 79,
+      "h": 46,
+      "src_box": [
+        1106,
+        165,
+        79,
+        45
+      ]
+    },
+    {
+      "name": "side_table",
+      "category": "sprite",
+      "file": "sprites/side_table.png",
+      "w": 44,
+      "h": 52,
+      "src_box": [
+        1045,
+        180,
+        44,
+        52
+      ]
+    },
+    {
+      "name": "plant_1",
+      "category": "sprite",
+      "file": "sprites/plant_1.png",
+      "w": 33,
+      "h": 53,
+      "src_box": [
+        869,
+        175,
+        33,
+        53
+      ]
+    },
+    {
+      "name": "plant_2",
+      "category": "sprite",
+      "file": "sprites/plant_2.png",
+      "w": 35,
+      "h": 53,
+      "src_box": [
+        1213,
+        154,
+        34,
+        53
+      ]
+    },
+    {
+      "name": "char_1",
+      "category": "sprite",
+      "file": "sprites/char_1.png",
+      "w": 27,
+      "h": 56,
+      "src_box": [
+        79,
+        452,
+        27,
+        56
+      ]
+    },
+    {
+      "name": "char_2",
+      "category": "sprite",
+      "file": "sprites/char_2.png",
+      "w": 27,
+      "h": 60,
+      "src_box": [
+        125,
+        449,
+        27,
+        60
+      ]
+    },
+    {
+      "name": "char_3",
+      "category": "sprite",
+      "file": "sprites/char_3.png",
+      "w": 29,
+      "h": 58,
+      "src_box": [
+        164,
+        450,
+        29,
+        58
+      ]
+    },
+    {
+      "name": "char_4",
+      "category": "sprite",
+      "file": "sprites/char_4.png",
+      "w": 28,
+      "h": 55,
+      "src_box": [
+        30,
+        519,
+        28,
+        55
+      ]
+    },
+    {
+      "name": "char_5",
+      "category": "sprite",
+      "file": "sprites/char_5.png",
+      "w": 27,
+      "h": 55,
+      "src_box": [
+        79,
+        519,
+        27,
+        55
+      ]
+    },
+    {
+      "name": "char_6",
+      "category": "sprite",
+      "file": "sprites/char_6.png",
+      "w": 28,
+      "h": 56,
+      "src_box": [
+        125,
+        518,
+        28,
+        56
+      ]
+    },
+    {
+      "name": "office_chair_1",
+      "category": "sprite",
+      "file": "sprites/office_chair_1.png",
+      "w": 35,
+      "h": 49,
+      "src_box": [
+        27,
+        587,
+        35,
+        49
+      ]
+    },
+    {
+      "name": "office_chair_2",
+      "category": "sprite",
+      "file": "sprites/office_chair_2.png",
+      "w": 37,
+      "h": 49,
+      "src_box": [
+        75,
+        586,
+        35,
+        49
+      ]
+    },
+    {
+      "name": "trash_bin_round",
+      "category": "sprite",
+      "file": "sprites/trash_bin_round.png",
+      "w": 31,
+      "h": 39,
+      "src_box": [
+        124,
+        589,
+        31,
+        39
+      ]
+    },
+    {
+      "name": "trash_bin_square",
+      "category": "sprite",
+      "file": "sprites/trash_bin_square.png",
+      "w": 28,
+      "h": 37,
+      "src_box": [
+        171,
+        589,
+        27,
+        37
+      ]
+    },
+    {
+      "name": "flag_red",
+      "category": "sprite",
+      "file": "sprites/flag_red.png",
+      "w": 28,
+      "h": 43,
+      "src_box": [
+        169,
+        531,
+        28,
+        41
+      ]
+    },
+    {
+      "name": "flag_indonesia",
+      "category": "sprite",
+      "file": "sprites/flag_indonesia.png",
+      "w": 29,
+      "h": 40,
+      "src_box": [
+        208,
+        531,
+        27,
+        40
+      ]
+    },
+    {
+      "name": "clock_1200_alt",
+      "category": "sprite",
+      "file": "sprites/clock_1200_alt.png",
+      "w": 49,
+      "h": 26,
+      "src_box": [
+        203,
+        483,
+        49,
+        26
+      ]
+    },
+    {
+      "name": "clock_1200_small",
+      "category": "sprite",
+      "file": "sprites/clock_1200_small.png",
+      "w": 41,
+      "h": 25,
+      "src_box": [
+        87,
+        659,
+        41,
+        25
+      ]
+    },
+    {
+      "name": "dog_corgi_1",
+      "category": "sprite",
+      "file": "sprites/dog_corgi_1.png",
+      "w": 46,
+      "h": 39,
+      "src_box": [
+        1140,
+        213,
+        46,
+        39
+      ]
+    },
+    {
+      "name": "cat_black_1",
+      "category": "sprite",
+      "file": "sprites/cat_black_1.png",
+      "w": 42,
+      "h": 36,
+      "src_box": [
+        1203,
+        215,
+        42,
+        36
+      ]
+    },
+    {
+      "name": "dog_corgi_2",
+      "category": "sprite",
+      "file": "sprites/dog_corgi_2.png",
+      "w": 46,
+      "h": 43,
+      "src_box": [
+        26,
+        645,
+        46,
+        41
+      ]
+    },
+    {
+      "name": "dog_corgi_3",
+      "category": "sprite",
+      "file": "sprites/dog_corgi_3.png",
+      "w": 48,
+      "h": 40,
+      "src_box": [
+        144,
+        644,
+        48,
+        39
+      ]
+    },
+    {
+      "name": "cat_black_2",
+      "category": "sprite",
+      "file": "sprites/cat_black_2.png",
+      "w": 44,
+      "h": 37,
+      "src_box": [
+        211,
+        648,
+        42,
+        36
+      ]
+    },
+    {
+      "name": "room_cafeteria",
+      "category": "room",
+      "file": "rooms/room_cafeteria.png",
+      "w": 363,
+      "h": 206,
+      "src_box": [
+        384,
+        274,
+        363,
+        206
+      ]
+    },
+    {
+      "name": "room_main_office",
+      "category": "room",
+      "file": "rooms/room_main_office.png",
+      "w": 363,
+      "h": 222,
+      "src_box": [
+        384,
+        480,
+        363,
+        222
+      ]
+    },
+    {
+      "name": "room_meeting_room",
+      "category": "room",
+      "file": "rooms/room_meeting_room.png",
+      "w": 457,
+      "h": 209,
+      "src_box": [
+        798,
+        274,
+        457,
+        209
+      ]
+    },
+    {
+      "name": "room_lounge",
+      "category": "room",
+      "file": "rooms/room_lounge.png",
+      "w": 457,
+      "h": 219,
+      "src_box": [
+        798,
+        483,
+        457,
+        219
+      ]
+    }
+  ]
+}

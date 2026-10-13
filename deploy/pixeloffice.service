@@ -1,0 +1,14 @@
+[Unit]
+Description=PixelOffice Virtual Office dashboard (2D)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__APP_DIR__
+ExecStart=/usr/bin/python3 __APP_DIR__/server.py
+Restart=on-failure
+RestartSec=5
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target

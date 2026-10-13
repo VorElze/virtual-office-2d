@@ -1,0 +1,14 @@
+# --- runtime data (jangan di-commit) ---
+chat.json
+chat_audit.log
+certs/
+__pycache__/
+*.pyc
+cache/
+backup_*/
+.backup_*/
+
+# --- editor/os ---
+.DS_Store
+*.swp
+.commit-msg
