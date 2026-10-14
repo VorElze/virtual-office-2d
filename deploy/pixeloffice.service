@@ -9,6 +9,8 @@ ExecStart=/usr/bin/python3 __APP_DIR__/server.py
 Restart=on-failure
 RestartSec=5
 Environment=HOME=/root
+# VO-OFFICE-R1: hapus bila TIDAK di belakang reverse proxy prefix /office.
+Environment=OFFICE_PREFIX=/office
 
 [Install]
 WantedBy=multi-user.target

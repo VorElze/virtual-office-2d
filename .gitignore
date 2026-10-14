@@ -8,6 +8,13 @@ cache/
 backup_*/
 .backup_*/
 
+# --- runtime auth (RAHASIA — jangan di-commit) ---
+users.json
+sessions.json
+invite.json
+.auth_enabled
+*.bak*
+
 # --- editor/os ---
 .DS_Store
 *.swp

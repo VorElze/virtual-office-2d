@@ -9,6 +9,9 @@ ExecStart=/usr/bin/python3 __APP_DIR__/https_server.py
 Restart=on-failure
 RestartSec=5
 Environment=HOME=/root
+# VO-OFFICE-R1: backend melayani prefix /office di belakang Apache ProxyPass.
+# Hapus baris ini bila diakses langsung tanpa reverse proxy.
+Environment=OFFICE_PREFIX=/office
 
 [Install]
 WantedBy=multi-user.target

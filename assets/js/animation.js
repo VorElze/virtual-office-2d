@@ -5,7 +5,10 @@
 import { GRID, COLS, ROWS, WORLD_W, WORLD_H, idx, cellCenter, DESKS, ROAM_SPOTS, ZONES, zoneAt, buildWalkMask } from './map.js';
 import { findPath, nearestFree } from './pathfinding.js';
 
-const ASSET_ROOT = '/assets';
+// ROOT relatif (tanpa leading slash): resolusi mengikuti URL dokumen, jadi
+// benar baik di "/" (port 8765) maupun di "/office/" (reverse proxy Apache).
+// Path absolut "/assets" akan 404 di belakang prefix /office.
+const ASSET_ROOT = 'assets';
 const SPRITE_SIZE = 32;
 const SPEED = 88; // world pixels / second
 const FRAME_MS = 230;

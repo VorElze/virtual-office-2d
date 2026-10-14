@@ -2,6 +2,8 @@
 // Endpoints tetap relative di api.js; tidak ada server/API change.
 
 import { fetchOffice, fetchChat, sendChat } from './api.js';
+// VO-OFFICE-R1: gate auth — registrasi pertama / login wajib sebelum data.
+import { initAuth, onUnauthorized, doLogout } from './auth.js';
 import { OfficeAnimator, agentLabel } from './animation.js';
 import { WORLD_W, WORLD_H, GRID, ZONES } from './map.js';
 import { renderBase, loadAssets } from './render.js';
@@ -271,6 +273,7 @@ function drawBase() {
 async function updateOffice() {
   const result = await fetchOffice();
   if (!result.ok) {
+    if (result.httpStatus === 401) { onUnauthorized(); setConnection(false, 'Belum masuk'); return; }
     setConnection(false, result.offline ? 'Offline' : `API ${result.httpStatus || 'error'}`);
     return;
   }
@@ -342,6 +345,8 @@ async function updateChat() {
     // Tanpa ini sendChat selalu 403 (Dean review 12 Okt — csrfToken tak pernah terisi).
     if (result.data?.csrf) csrfToken = result.data.csrf;
     renderChat(result.data);
+  } else if (result.httpStatus === 401) {
+    onUnauthorized();
   }
 }
 
@@ -468,6 +473,11 @@ function installChat() {
     ui.chatMessages.scrollTop = ui.chatMessages.scrollHeight;
     const result = await sendChat({ text, targetProfile, clientMessageId, csrf: csrfToken });
     if (!result.ok) {
+      if (result.httpStatus === 401) {
+        optimistic.remove();
+        onUnauthorized();
+        return;
+      }
       optimistic.querySelector('.msgstate').textContent = `failed: ${result.error || 'network error'}`;
       showToast(`Chat gagal dikirim (${result.httpStatus || 'network'}).`);
       return;
@@ -478,6 +488,11 @@ function installChat() {
 }
 
 async function bootstrap() {
+  // VO-OFFICE-R1: tahan render sampai status auth jelas — bila auth aktif dan
+  // belum login, initAuth() menampilkan overlay dan hanya resolve setelah sukses.
+  const allowed = await initAuth();
+  if (allowed === false) { setConnection(false, 'Belum masuk'); return; }
+  installLogoutButton();
   setOverlayLabels();
   await loadAssets();
   zoom = fitScale(); // default auto-fit (world 1056px > viewport)
@@ -508,6 +523,19 @@ bootstrap().catch((error) => {
   setConnection(false, 'UI error');
   showToast('Virtual Office gagal dimulai. Cek console/log.');
 });
+
+/** VO-OFFICE-R1: tombol keluar di topbar (muncul hanya saat auth aktif). */
+function installLogoutButton() {
+  const host = document.querySelector('.top-actions');
+  if (!host || document.getElementById('logoutButton')) return;
+  const button = document.createElement('button');
+  button.className = 'retro-button';
+  button.id = 'logoutButton';
+  button.textContent = '⎋ Keluar';
+  button.title = 'Keluar dari Virtual Office';
+  button.addEventListener('click', () => { doLogout(); });
+  host.appendChild(button);
+}
 
 // Debug handle: dipakai QA (Harry/Dean) untuk memeriksa state animator tanpa membongkar bundle.
 window.__office = {

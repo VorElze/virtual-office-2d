@@ -5,12 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>Hermes — Virtual Office</title>
-  <link rel="icon" href="/assets/favicon.ico" sizes="any">
-  <link rel="stylesheet" href="/assets/css/office.css">
+  <link rel="icon" href="assets/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="assets/css/office.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="Hermes Virtual Office"><span class="brand-mark">⌂</span><span><b>Hermes Virtual Office</b><small>Pixel team space · live workforce board</small></span></a>
+    <a class="brand" href="./" aria-label="Hermes Virtual Office"><span class="brand-mark">⌂</span><span><b>Hermes Virtual Office</b><small>Pixel team space · live workforce board</small></span></a>
     <div class="top-actions"><span class="connection"><i id="connectionLed"></i><span id="connectionText">Memuat…</span></span><time id="updated">—</time><button class="retro-button" id="refreshButton">↻ Refresh</button></div>
   </header>
   <main class="page">
@@ -76,6 +76,36 @@
     </div>
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="/assets/js/main.js"></script>
+  <!-- VO-OFFICE-R1: overlay auth (registrasi pertama / login). z-index 60 —
+       di atas #toast (50) agar tidak tertutup saat toast muncul. -->
+  <div id="authModal" class="auth-modal" data-mode="" hidden role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="auth-backdrop" data-backdrop="true"></div>
+    <div class="auth-panel">
+      <div class="auth-head">
+        <div><h2 id="authTitle">🔐 Virtual Office</h2><small id="authSubtitle">masuk untuk melanjutkan</small></div>
+        <span class="auth-mark" aria-hidden="true">⌂</span>
+      </div>
+      <form id="authLoginForm" class="auth-form" autocomplete="on" hidden>
+        <label for="authLoginUser">Username</label>
+        <input id="authLoginUser" name="username" autocomplete="username" required>
+        <label for="authLoginPass">Password</label>
+        <input id="authLoginPass" name="password" type="password" autocomplete="current-password" required>
+        <button class="retro-button auth-submit" type="submit">Masuk</button>
+      </form>
+      <form id="authRegisterForm" class="auth-form" autocomplete="off" hidden>
+        <p class="auth-lead">Belum ada akun. Buat <b>akun pertama</b> — setelah ini registrasi ditutup.</p>
+        <label for="authRegUser">Username</label>
+        <input id="authRegUser" name="username" autocomplete="username" required minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]+">
+        <label for="authRegPass">Password</label>
+        <input id="authRegPass" name="password" type="password" autocomplete="new-password" required minlength="8">
+        <label for="authRegPass2">Ulangi password</label>
+        <input id="authRegPass2" name="confirm" type="password" autocomplete="new-password" required minlength="8">
+        <button class="retro-button auth-submit" type="submit">Daftar &amp; masuk</button>
+      </form>
+      <p id="authError" class="auth-error" role="alert" hidden></p>
+      <p class="auth-note" id="authNote"></p>
+    </div>
+  </div>
+  <script type="module" src="assets/js/main.js"></script>
 </body>
 </html>

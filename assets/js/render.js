@@ -1,7 +1,10 @@
 // render.js — komposisi room pixel-art pada ukuran native 1x.
 import { GRID, COLS, ROWS, ZONES } from './map.js';
 
-const ROOT = '/assets/office';
+// ROOT relatif (tanpa leading slash): resolusi mengikuti URL dokumen, jadi
+// benar baik di "/" (port 8765) maupun di "/office/" (reverse proxy Apache).
+// Path absolut "/assets/office" akan 404 di belakang prefix /office.
+const ROOT = 'assets/office';
 const cache = new Map();
 const ROOM_FILES = {
   cafeteria: `${ROOT}/rooms/room_cafeteria.png`,

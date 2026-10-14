@@ -12,6 +12,8 @@ Serves the static dashboard plus:
 
 Chat replies run `hermes -p <profile> -z <prompt>` as argv (no shell).
 """
+import base64
+import hashlib
 import json
 import hmac
 import os
@@ -77,6 +79,334 @@ CHAT_RATE_PER_MIN = 10       # per-client POSTs per minute
 CHAT_TIMEOUT_S = int(os.environ.get("CHAT_TIMEOUT_S", "180"))
 HERMES_BIN = os.environ.get("HERMES_BIN", "/root/.hermes/hermes-agent/.hermes/bin/hermes")
 OFFICE_TOKEN = os.environ.get("OFFICE_TOKEN", "")  # optional extra POST auth
+
+# ---------------------------------------------------------------------------
+# VO-OFFICE-R1: prefix mount (Apache reverse proxy -> 127.0.0.1:8765)
+# ---------------------------------------------------------------------------
+# Backend melayani prefix /office (strip) supaya aset & API relatif tetap jalan
+# di belakang ProxyPass /office http://127.0.0.1:8765/. Port 8765 tetap jalan
+# tanpa prefix untuk backward-compat -> nilai "" = tanpa prefix.
+# Set pixeloffice.service: Environment=OFFICE_PREFIX=/office
+MOUNT_PREFIX = os.environ.get("OFFICE_PREFIX", "").rstrip("/")
+
+# ---------------------------------------------------------------------------
+# VO-OFFICE-R1: auth (registrasi pertama + login wajib)
+# ---------------------------------------------------------------------------
+# Storage : users.json  (password hash pbkdf2_hmac, stdlib saja)
+#           sessions.json (token acak -> {user, expires_at})
+# Flag     : .auth_enabled  (dipakai untuk port 8765 backward-compat; file
+#            pertama kali dibuat saat registrasi pertama berhasil)
+# Rate-limit login per IP: 5 gagal / 5 menit -> 429 sementara.
+USERS_PATH = ROOT / "users.json"
+SESSIONS_PATH = ROOT / "sessions.json"
+AUTH_FLAG_PATH = ROOT / ".auth_enabled"
+INVITE_PATH = ROOT / "invite.json"      # link registrasi sekali pakai (invite)
+
+AUTH_COOKIE = "office_session"
+SESSION_TTL_S = int(os.environ.get("AUTH_SESSION_TTL_S", str(12 * 3600)))
+AUTH_MAX_ATTEMPTS = 5
+AUTH_WINDOW_S = 300          # sliding window percobaan login per IP
+PBKDF2_ITERS = 200_000       # OWASP 2023 minimum untuk PBKDF2-HMAC-SHA256
+MIN_PW = 8
+MAX_PW = 256
+MIN_USER = 3
+MAX_USER = 32
+
+_auth_lock = threading.RLock()
+_auth_attempts = {}          # ip -> [epoch, ...] percobaan login gagal
+
+
+def auth_required():
+    """Autentikasi SELALU aktif (termasuk port 8765 polos — port terbuka ke publik).
+
+    Sebelum user pertama terdaftar, "mode" = register: halaman registrasi yang
+    ditampilkan, dan semua /api/* tetap 401. Tanpa ini siapa pun yang menang
+    registrasi pertama menguasai instance, dan jalur tanpa login tetap terbuka.
+    """
+    return True
+
+
+def _atomic_json(path, data):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(tmp, 0o600)
+    tmp.replace(path)
+
+
+def _load_users():
+    try:
+        raw = json.loads(USERS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items()
+            if isinstance(v, dict) and isinstance(v.get("salt"), str)
+            and isinstance(v.get("hash"), str)}
+
+
+def _load_sessions():
+    try:
+        raw = json.loads(SESSIONS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if isinstance(v, dict)}
+
+
+def _save_sessions(sessions):
+    try:
+        _atomic_json(SESSIONS_PATH, sessions)
+    except OSError:
+        pass
+
+
+def _hash_password(password, salt_b64, iterations=PBKDF2_ITERS):
+    salt = base64.b64decode(salt_b64.encode())
+    return base64.b64encode(
+        hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    ).decode()
+
+
+def _valid_username(name):
+    if not (MIN_USER <= len(name) <= MAX_USER):
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9_.\-]+", name))
+
+
+def _valid_password(pw):
+    return MIN_PW <= len(pw) <= MAX_PW
+
+
+def admin_add_user(username, password):
+    """Tambah user via CLI (registrasi web ditutup setelah akun pertama).
+
+    Dipakai dari server: cd <app> && python3 server.py --add-user <name>
+    """
+    if not _valid_username(username):
+        return "username harus 3-32 karakter, hanya [A-Za-z0-9_.-]"
+    if not _valid_password(password):
+        return f"password minimal {MIN_PW} karakter"
+    with _auth_lock:
+        users = _load_users()
+        if username in users:
+            return "username sudah terdaftar"
+        salt = base64.b64encode(secrets.token_bytes(16)).decode()
+        users[username] = {"salt": salt,
+                           "hash": _hash_password(password, salt),
+                           "iterations": PBKDF2_ITERS,
+                           "created_at": _iso(time.time())}
+        _atomic_json(USERS_PATH, users)
+        if not AUTH_FLAG_PATH.exists():
+            try:
+                AUTH_FLAG_PATH.write_text(_iso(time.time()), encoding="utf-8")
+            except OSError:
+                pass
+    return None
+
+
+def create_invite(ttl_hours=24):
+    """Buat link registrasi sekali pakai (invite.json). Dipakai via CLI:
+    python3 server.py --make-invite [ttl_jam]
+    """
+    token = secrets.token_urlsafe(24)
+    now = time.time()
+    data = {"token": token, "created_at": _iso(now),
+            "expires_at": _iso(now + ttl_hours * 3600), "used": False}
+    _atomic_json(INVITE_PATH, data)
+    _audit("invite_created expires=" + data["expires_at"])
+    return data
+
+
+def invite_valid(token):
+    """invite.json ada, belum dipakai, belum kedaluwarsa."""
+    if not token or not isinstance(token, str):
+        return False
+    try:
+        data = json.loads(INVITE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if data.get("used"):
+        return False
+    try:
+        exp = time.mktime(time.strptime(data["expires_at"], "%Y-%m-%dT%H:%M:%S%z"))
+    except Exception:
+        return False
+    if time.time() > exp:
+        return False
+    return hmac.compare_digest(str(data.get("token") or ""), token)
+
+
+def consume_invite(token):
+    """Tandai invite terpakai — harus dipanggil SETELAH registrasi sukses."""
+    try:
+        data = json.loads(INVITE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return
+    if hmac.compare_digest(str(data.get("token") or ""), token or ""):
+        data["used"] = True
+        data["used_at"] = _iso(time.time())
+        try:
+            _atomic_json(INVITE_PATH, data)
+        except OSError:
+            pass
+        _audit("invite_consumed")
+
+
+def register_first(username, password, confirm, invite=None):
+    """Registrasi TERTUTUP setelah akun pertama (403), KECUALI punya invite
+    sekali pakai yang valid -> akun tambahan bisa dibuat lewat link undangan.
+    """
+    if _load_users() and not invite_valid(invite):
+        return 403, {"ok": False, "error": "register_closed",
+                     "detail": "registrasi ditutup; pakai link undangan "
+                               "(?invite=...) atau tambah user via server "
+                               "(python3 server.py --add-user <nama>)"}
+    if password != confirm:
+        return 400, {"ok": False, "error": "password_mismatch",
+                     "detail": "konfirmasi password tidak sama"}
+    if not _valid_username(username):
+        return 400, {"ok": False, "error": "bad_username",
+                     "detail": f"username {MIN_USER}-{MAX_USER} karakter, "
+                               "hanya [A-Za-z0-9_.-]"}
+    if not _valid_password(password):
+        return 400, {"ok": False, "error": "bad_password",
+                     "detail": f"password minimal {MIN_PW} karakter"}
+    with _auth_lock:
+        users = _load_users()
+        if users and not invite_valid(invite):
+            # race: user lain menang duluan (invite sendiri tetap boleh)
+            return 403, {"ok": False, "error": "register_closed"}
+        salt = base64.b64encode(secrets.token_bytes(16)).decode()
+        users[username] = {"salt": salt,
+                           "hash": _hash_password(password, salt),
+                           "iterations": PBKDF2_ITERS,
+                           "created_at": _iso(time.time())}
+        try:
+            _atomic_json(USERS_PATH, users)
+        except OSError as exc:
+            return 500, {"ok": False, "error": "storage_error", "detail": str(exc)}
+        try:
+            AUTH_FLAG_PATH.write_text(_iso(time.time()), encoding="utf-8")
+        except OSError:
+            pass
+        token = _issue_session(username)
+        if users and invite:
+            consume_invite(invite)   # sekali pakai: tandai terpakai
+    _audit(f"register user={username} client={getattr(_cur_client, 'ip', '?')}")
+    return 200, {"ok": True, "username": username, "token": token,
+                 "mode": "register"}
+
+
+_cur_client = threading.local()   # client ip utk audit saat ini thread
+
+
+def login_ok(ip, username, password):
+    """-> (http_code, payload). Rate-limit per IP: 5 gagal / 5 menit -> 429."""
+    now = time.time()
+    with _auth_lock:
+        hits = [t for t in _auth_attempts.get(ip, []) if now - t < AUTH_WINDOW_S]
+        _auth_attempts[ip] = hits
+        if len(hits) >= AUTH_MAX_ATTEMPTS:
+            _save_login_attempts()
+            return 429, {"ok": False, "error": "rate_limit",
+                         "detail": f"terlalu banyak percobaan gagal, coba lagi "
+                                   f"dalam {AUTH_WINDOW_S // 60} menit"}
+        users = _load_users()
+        if not users:
+            # belum ada user -> arahkan ke registrasi, bukan menambah hit
+            _save_login_attempts()
+            return 400, {"ok": False, "error": "no_user",
+                         "detail": "belum ada user, lakukan registrasi dahulu"}
+        rec = users.get(username)
+        ok = False
+        if rec:
+            try:
+                expected = _hash_password(password, rec["salt"],
+                                          int(rec.get("iterations", PBKDF2_ITERS)))
+                ok = hmac.compare_digest(expected, rec["hash"])
+            except Exception:
+                ok = False
+        if not ok:
+            hits.append(now)
+            _auth_attempts[ip] = hits
+            _save_login_attempts()
+            _audit(f"login_failed user={username!r} client={ip}")
+            return 401, {"ok": False, "error": "bad_credentials",
+                         "detail": "username atau password salah"}
+        _auth_attempts.pop(ip, None)
+        _save_login_attempts()
+        token = _issue_session(username)
+    _audit(f"login user={username} client={ip}")
+    return 200, {"ok": True, "username": username, "token": token}
+
+
+def _save_login_attempts():
+    """Catat window percobaan ke disk agar restart tidak me-reset limiter."""
+    try:
+        _atomic_json(ROOT / ".login_attempts.json",
+                     {ip: ts for ip, ts in _auth_attempts.items()
+                      if any(time.time() - t < AUTH_WINDOW_S for t in ts)})
+    except OSError:
+        pass
+
+
+def _load_login_attempts():
+    global _auth_attempts
+    try:
+        raw = json.loads((ROOT / ".login_attempts.json").read_text(encoding="utf-8"))
+    except Exception:
+        raw = {}
+    now = time.time()
+    _auth_attempts = {ip: [t for t in v if isinstance(t, (int, float))
+                           and now - t < AUTH_WINDOW_S]
+                      for ip, v in (raw or {}).items() if isinstance(v, list)}
+    _auth_attempts = {k: v for k, v in _auth_attempts.items() if v}
+
+
+_load_login_attempts()
+
+
+def _issue_session(username):
+    token = secrets.token_urlsafe(32)
+    with _auth_lock:
+        sessions = _load_sessions()
+        # bersihkan yang kedaluwarsa saat menulis
+        sessions = {k: v for k, v in sessions.items()
+                    if (v.get("exp") or 0) > time.time()}
+        sessions[token] = {"user": username,
+                           "exp": time.time() + SESSION_TTL_S,
+                           "iat": time.time()}
+        _save_sessions(sessions)
+    return token
+
+
+def session_user(token):
+    """-> username bila token valid & belum kedaluwarsa, else None."""
+    if not token:
+        return None
+    with _auth_lock:
+        sessions = _load_sessions()
+        rec = sessions.get(token)
+        if not rec:
+            return None
+        if (rec.get("exp") or 0) <= time.time():
+            sessions.pop(token, None)
+            _save_sessions(sessions)
+            return None
+        return rec.get("user")
+
+
+def logout(token):
+    if not token:
+        return
+    with _auth_lock:
+        sessions = _load_sessions()
+        if sessions.pop(token, None) is not None:
+            _save_sessions(sessions)
+    _audit("logout")
+
 
 
 def _iso(ts):
@@ -651,6 +981,19 @@ class Handler(SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):  # quiet stdout; errors surface via audit
         pass
 
+    # ---- VO-OFFICE-R1: strip mount prefix (/office) sebelum routing ----
+    def _bare_path(self):
+        """Path tanpa querystring dan tanpa MOUNT_PREFIX.
+
+        Apache: ProxyPass /office http://127.0.0.1:8765/ sudah me-strip, tapi
+        backend tetap melayani /office/* langsung (mis. via curl 8765) supaya
+        tidak ada dua jalur yang berbeda perilaku.
+        """
+        raw = urllib.parse.urlsplit(self.path).path
+        if MOUNT_PREFIX and (raw == MOUNT_PREFIX or raw.startswith(MOUNT_PREFIX + "/")):
+            raw = raw[len(MOUNT_PREFIX):] or "/"
+        return raw
+
     def _json(self, obj, code=200, csrf=None):
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
@@ -671,6 +1014,38 @@ class Handler(SimpleHTTPRequestHandler):
                 return v
         return None
 
+    def _client_ip(self):
+        peer = self.client_address[0] if self.client_address else "?"
+        # Apache mod_proxy selalu menulis X-Forwarded-For. Tanpa ini semua
+        # request di balik ProxyPass terlihat sebagai 127.0.0.1 -> rate-limit
+        # login jadi satu ember (5 gagal dari siapa pun mengunci semua orang).
+        # Hanya percaya XFF bila peer memang loopback (yakni Apache kita),
+        # supaya klien luar tidak bisa memalsukan IP sendiri.
+        if peer in ("127.0.0.1", "::1"):
+            xff = (self.headers.get("X-Forwarded-For") or "").strip()
+            if xff:
+                # hop terakhir = yang ditambahkan proxy terdekat (Apache kita)
+                return xff.split(",")[-1].strip() or peer
+        return peer
+
+    # ---- VO-OFFICE-R1: session cookie (HttpOnly, SameSite=Lax) ----
+    def _session_token(self):
+        return self._cookie(AUTH_COOKIE)
+
+    def _authed_user(self):
+        if not auth_required():
+            return None
+        return session_user(self._session_token())
+
+    def _set_session_cookie(self, token):
+        self.send_header("Set-Cookie",
+                         f"{AUTH_COOKIE}={token}; Path=/; HttpOnly; "
+                         f"SameSite=Lax; Max-Age={SESSION_TTL_S}")
+
+    def _clear_session_cookie(self):
+        self.send_header("Set-Cookie",
+                         f"{AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0")
+
     def _csrf_cookie(self):
         """Double-submit token: readable by same-origin JS, echoed on POST."""
         return self._cookie("office_csrf") or secrets.token_hex(16)
@@ -687,7 +1062,7 @@ class Handler(SimpleHTTPRequestHandler):
                   ".css", ".js", ".woff", ".woff2", ".ttf"}
 
     def translate_path(self, path):
-        raw = urllib.parse.urlsplit(path).path
+        raw = self._bare_path()
         if raw in ("/", "/index.html"):
             return str(ROOT / "index.html")
         if raw.startswith("/assets/"):
@@ -730,40 +1105,156 @@ class Handler(SimpleHTTPRequestHandler):
             return "bad_token"
         return None
 
+    # ---- VO-OFFICE-R1: auth routes ----
+    def _auth_status(self):
+        # Auth selalu aktif. mode: register = belum ada user (registrasi terbuka),
+        # login = sudah ada user (registrasi ditutup).
+        has_user = bool(_load_users())
+        user = self._authed_user()
+        self._json({"ok": True, "auth_required": True, "authenticated": bool(user),
+                    "user": user,
+                    "mode": "register" if not has_user else "login",
+                    "csrf": self._csrf_cookie()}, csrf=self._csrf_cookie())
+
+    def _handle_auth_post(self, action):
+        """POST /api/auth/{register,login,logout} -> selalu JSON."""
+        if action == "logout":
+            logout(self._session_token())
+            body = json.dumps({"ok": True}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self._clear_session_cookie()
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        if action == "login":
+            if not auth_required():
+                self._json({"ok": False, "error": "no_user",
+                            "detail": "belum ada user, lakukan registrasi dahulu"}, 400)
+                return
+            data = self._read_body() or {}
+            user = (data.get("username") or "").strip()
+            pw = data.get("password") or ""
+            if not user or not pw:
+                self._json({"ok": False, "error": "missing_fields",
+                            "detail": "username dan password wajib diisi"}, 400)
+                return
+            ip = self._client_ip()
+            code, payload = login_ok(ip, user, pw)
+            if code == 200:
+                body = json.dumps(payload, ensure_ascii=False).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self._set_session_cookie(payload["token"])
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self._json(payload, code)
+            return
+
+        if action == "register":
+            data = self._read_body() or {}
+            code, payload = register_first((data.get("username") or "").strip(),
+                                           data.get("password") or "",
+                                           data.get("confirm") or "",
+                                           invite=data.get("invite") or None)
+            if code == 200:
+                body = json.dumps(payload, ensure_ascii=False).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self._set_session_cookie(payload["token"])
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self._json(payload, code)
+            return
+
+        self._json({"ok": False, "error": "unknown_action"}, 404)
+
     def do_GET(self):
-        path = self.path.split("?", 1)[0]
-        if path.startswith("/api/office"):
-            self._json(office_payload(), csrf=self._csrf_cookie())
+        _cur_client.ip = self._client_ip()
+        raw = urllib.parse.urlsplit(self.path).path
+        # Redirect /office -> /office/. Tanpa trailing slash, index.html di URL
+        # "/office" meresolve "assets/js/main.js" dan "api/office" ke root
+        # (/assets/..., /api/...) yang TIDAK di-proxy -> 404 dan halaman kosong.
+        if MOUNT_PREFIX and raw == MOUNT_PREFIX:
+            query = urllib.parse.urlsplit(self.path).query
+            self.send_response(302)
+            self.send_header("Location", MOUNT_PREFIX + "/" + (f"?{query}" if query else ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
             return
-        if path.startswith("/api/chat"):
-            tok = self._csrf_cookie()
-            with chat_lock:
-                log = json.loads(json.dumps(chat_log[-100:]))
-                groups = {o.get("group"): _group_state(o["group"])
-                          for o in outbox.values()}
-                groups = {k: v for k, v in groups.items() if k and v}
-            self._json({"messages": log, "group_states": groups, "csrf": tok},
-                       csrf=tok)
+        path = self._bare_path()
+        if path.startswith("/api/auth/"):
+            action = path.rsplit("/", 1)[-1]
+            if action == "status":
+                self._auth_status()
+            else:
+                self._json({"ok": False, "error": "method_not_allowed"}, 405)
             return
-        # Static response must issue cookie before end_headers. For the root,
-        # send it via the common SimpleHTTPRequestHandler header hook.
+        if path.startswith("/api/"):
+            # gate API: tanpa session valid -> 401 JSON (bukan HTML)
+            if auth_required() and not self._authed_user():
+                self._json({"ok": False, "error": "unauthorized",
+                            "detail": "login diperlukan"}, 401)
+                return
+            if path.startswith("/api/office"):
+                self._json(office_payload(), csrf=self._csrf_cookie())
+                return
+            if path.startswith("/api/chat"):
+                tok = self._csrf_cookie()
+                with chat_lock:
+                    log = json.loads(json.dumps(chat_log[-100:]))
+                    groups = {o.get("group"): _group_state(o["group"])
+                              for o in outbox.values()}
+                    groups = {k: v for k, v in groups.items() if k and v}
+                self._json({"messages": log, "group_states": groups, "csrf": tok},
+                           csrf=tok)
+                return
+            self._json({"ok": False, "error": "not_found"}, 404)
+            return
+        # Static: index.html & aset selalu dilayani (shell aplikasi + modal auth
+        # dirender dari situ); DATA di balik /api/* tetap 401 tanpa session.
         super().do_GET()
 
     def end_headers(self):
-        if self.path.split("?", 1)[0] in ("/", "/index.html"):
+        if self._bare_path() in ("/", "/index.html"):
             self._csrf_needed()
+        # Anti-cache: semua respons statis + halaman selalu no-store.
+        # Browser yang cache JS/CSS lama bikin halaman "muter-muter" setelah
+        # perubahan kode — kirim no-store + no-cache + must-revalidate.
+        self.send_header("Cache-Control",
+                         "no-store, no-cache, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
         super().end_headers()
 
 
     def do_POST(self):
-        if not self.path.startswith("/api/chat"):
+        _cur_client.ip = self._client_ip()
+        path = self._bare_path()
+        if path.startswith("/api/auth/"):
+            self._handle_auth_post(path.rsplit("/", 1)[-1])
+            return
+        if not path.startswith("/api/chat"):
             self.send_error(404)
+            return
+        if auth_required() and not self._authed_user():
+            self._json({"ok": False, "error": "unauthorized",
+                        "detail": "login diperlukan"}, 401)
             return
         err = self._authorize_post()
         if err:
             self._json({"ok": False, "error": err}, 403)
             return
-        client = self.client_address[0] if self.client_address else "?"
+        client = self._client_ip()
         if not _rate_ok(client):
             self._json({"ok": False, "error": "rate_limit",
                         "detail": f"maks {CHAT_RATE_PER_MIN} pesan/menit"}, 429)
@@ -875,6 +1366,21 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if len(os.sys.argv) >= 3 and os.sys.argv[1] == "--add-user":
+        import getpass
+        username = os.sys.argv[2]
+        password = getpass.getpass(f"Password untuk {username}: ")
+        error = admin_add_user(username, password)
+        if error:
+            raise SystemExit(error)
+        print(f"User {username} ditambahkan.")
+        raise SystemExit(0)
+    if len(os.sys.argv) >= 3 and os.sys.argv[1] == "--make-invite":
+        ttl = float(os.sys.argv[2])
+        inv = create_invite(ttl)
+        print(f"INVITE_TOKEN={inv['token']}")
+        print(f"EXPIRES={inv['expires_at']}")
+        raise SystemExit(0)
     port = int(os.environ.get("PORT", "8765"))
     srv = ThreadingHTTPServer(("0.0.0.0", port), Handler)
     print(f"PixelOffice server on http://0.0.0.0:{port}", flush=True)

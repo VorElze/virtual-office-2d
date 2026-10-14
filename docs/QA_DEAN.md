@@ -38,7 +38,7 @@ Tiga hal yang harus diperbaiki lebih dulu:
 ```
 tcp 103.154.214.197:8765 OPEN
 GET /certs/server.key -> HTTP/1.0 200 OK
-body-first-bytes: b'[REDACTED: PEM private key material]'
+body-first-bytes: b'-----BEGIN PRIVATE KEY-----\nMI'
 ```
 Juga 200 OK dari publik/lokal: `/certs/server.crt`, `/chat.json`, `/server.py`,
 `/FINDINGS_DEAN.md`, `/SPEC_HARRY.md`, `/README.md`, `/__pycache__/` (200, listdir).
